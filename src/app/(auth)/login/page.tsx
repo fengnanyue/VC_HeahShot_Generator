@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -16,15 +15,24 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-      return;
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, password }),
+      });
+      const data = await res.json();
+      setLoading(false);
+      if (!res.ok) {
+        setError(data.error ?? "Failed to sign in");
+        return;
+      }
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err) {
+      setLoading(false);
+      setError(err instanceof Error ? err.message : "Failed to sign in");
     }
-    router.push("/dashboard");
-    router.refresh();
   }
 
   return (
@@ -43,17 +51,17 @@ export default function LoginPage() {
             </div>
           )}
           <div className="space-y-4">
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email
+            <label htmlFor="identifier" className="block text-sm font-medium text-gray-700">
+              Email or username
             </label>
             <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
+              id="identifier"
+              name="identifier"
+              type="text"
+              autoComplete="username"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
             <label htmlFor="password" className="block text-sm font-medium text-gray-700">

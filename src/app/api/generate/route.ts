@@ -1,17 +1,26 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { HEADSHOT_STYLES } from "@/lib/constants";
 import { NextResponse } from "next/server";
-
-const MOCK_DELAY_MS = 3000;
-const PLACEHOLDER_IMAGE_URL =
-  "https://placehold.co/512x512/6366f1/white?text=AI+Headshot";
+import { fal } from "@fal-ai/client";
 
 export async function POST(request: Request) {
   try {
     const skipAuth = process.env.NEXT_PUBLIC_SKIP_AUTH === "true";
-    const userId = skipAuth
-      ? "00000000-0000-0000-0000-000000000001"
-      : undefined;
+    const supabase = await createClient();
+
+    let userId: string;
+    if (skipAuth) {
+      userId = "47cafe71-e389-4aee-903f-b4af6e92aad5";
+    } else {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      userId = user.id;
+    }
 
     const body = await request.json();
     const selfie_url = body?.selfie_url as string | undefined;
@@ -29,11 +38,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid style_slug" }, { status: 400 });
     }
 
-    const db = createAdminClient();
-    const { data: generation, error: insertError } = await db
+    // Use authed DB client so RLS sees auth.uid()
+    const { data: generation, error: insertError } = await supabase
       .from("generations")
       .insert({
-        user_id: userId ?? "00000000-0000-0000-0000-000000000001",
+        user_id: userId,
         selfie_url,
         style_slug,
         status: "processing",
@@ -48,20 +57,87 @@ export async function POST(request: Request) {
       );
     }
 
-    // Mock: simulate delay then set result
-    await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
-
-    const path = `headshots/${userId ?? "00000000-0000-0000-0000-000000000001"}/${generation.id}.jpg`;
+    // Get a signed URL for the selfie path so fal.ai can read it
+    const selfiePath = selfie_url.startsWith("selfies/")
+      ? selfie_url
+      : selfie_url.replace(/^.*selfies\//, "selfies/");
     const admin = createAdminClient();
+    const selfieSigned = await admin.storage
+      .from("selfies")
+      .createSignedUrl(selfiePath, 60 * 30);
+    const selfieSignedUrl = selfieSigned.data?.signedUrl;
 
-    const imageRes = await fetch(PLACEHOLDER_IMAGE_URL);
-    if (!imageRes.ok) {
-      await db
+    if (!selfieSignedUrl) {
+      await supabase
         .from("generations")
-        .update({ status: "failed", error_message: "Placeholder fetch failed" })
+        .update({
+          status: "failed",
+          error_message: "Could not create signed URL for selfie",
+        })
         .eq("id", generation.id);
       return NextResponse.json(
-        { error: "Mock generation failed" },
+        { error: "Could not create signed URL for selfie" },
+        { status: 500 }
+      );
+    }
+
+    // Call fal.ai Headshot Generator
+    if (!process.env.FAL_KEY) {
+      await supabase
+        .from("generations")
+        .update({
+          status: "failed",
+          error_message: "FAL_KEY is not configured",
+        })
+        .eq("id", generation.id);
+      return NextResponse.json(
+        { error: "FAL_KEY is not configured" },
+        { status: 500 }
+      );
+    }
+
+    fal.config({ credentials: process.env.FAL_KEY });
+
+    const falResult = await fal.subscribe(
+      "fal-ai/image-apps-v2/headshot-photo",
+      {
+        input: {
+          image_url: selfieSignedUrl,
+          background_style:
+            style_slug === "creative"
+              ? "gradient"
+              : style_slug === "casual"
+                ? "clean"
+                : "professional",
+        },
+      }
+    );
+
+    const outputUrl = falResult.data?.images?.[0]?.url as string | undefined;
+    if (!outputUrl) {
+      await supabase
+        .from("generations")
+        .update({
+          status: "failed",
+          error_message: "fal.ai did not return an image",
+        })
+        .eq("id", generation.id);
+      return NextResponse.json(
+        { error: "fal.ai did not return an image" },
+        { status: 500 }
+      );
+    }
+
+    // Download the generated image and upload to Supabase Storage
+    const path = `headshots/${userId}/${generation.id}.jpg`;
+    const imageRes = await fetch(outputUrl);
+    if (!imageRes.ok) {
+      await supabase
+        .from("generations")
+        .update({ status: "failed", error_message: "Failed to fetch fal.ai image" })
+        .eq("id", generation.id);
+      return NextResponse.json(
+        { error: "Failed to fetch fal.ai image" },
         { status: 500 }
       );
     }

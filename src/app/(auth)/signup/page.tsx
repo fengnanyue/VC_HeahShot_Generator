@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -16,15 +16,24 @@ export default function SignupPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signUp({ email, password });
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-      return;
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, username, password }),
+      });
+      const data = await res.json();
+      setLoading(false);
+      if (!res.ok) {
+        setError(data.error ?? "Failed to sign up");
+        return;
+      }
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err) {
+      setLoading(false);
+      setError(err instanceof Error ? err.message : "Failed to sign up");
     }
-    router.push("/dashboard");
-    router.refresh();
   }
 
   return (
@@ -43,6 +52,19 @@ export default function SignupPage() {
             </div>
           )}
           <div className="space-y-4">
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+              Username
+            </label>
+            <input
+              id="username"
+              name="username"
+              type="text"
+              autoComplete="username"
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
             <label htmlFor="email" className="block text-sm font-medium text-gray-700">
               Email
             </label>

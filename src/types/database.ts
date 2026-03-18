@@ -10,6 +10,7 @@ export interface Profile {
   id: string;
   email: string | null;
   full_name: string | null;
+  username?: string | null;
   avatar_url: string | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;

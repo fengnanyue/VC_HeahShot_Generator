@@ -3,6 +3,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
   full_name text,
+  username text unique,
   avatar_url text,
   stripe_customer_id text unique,
   stripe_subscription_id text,

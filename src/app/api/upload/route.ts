@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
@@ -7,9 +8,20 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 export async function POST(request: Request) {
   try {
     const skipAuth = process.env.NEXT_PUBLIC_SKIP_AUTH === "true";
-    const userId = skipAuth
-      ? "00000000-0000-0000-0000-000000000001"
-      : undefined;
+    let userId: string | null = null;
+
+    if (skipAuth) {
+      userId = "47cafe71-e389-4aee-903f-b4af6e92aad5";
+    } else {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      userId = user.id;
+    }
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;

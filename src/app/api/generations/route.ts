@@ -1,22 +1,36 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
   try {
-    const userId =
-      process.env.NEXT_PUBLIC_SKIP_AUTH === "true"
-        ? "00000000-0000-0000-0000-000000000001"
-        : undefined;
+    const skipAuth = process.env.NEXT_PUBLIC_SKIP_AUTH === "true";
+    let userId: string | null = null;
+
+    if (skipAuth) {
+      userId = "47cafe71-e389-4aee-903f-b4af6e92aad5";
+    } else {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      userId = user.id;
+    }
 
     const { searchParams } = new URL(request.url);
     const limit = Math.min(Number(searchParams.get("limit")) || 20, 50);
     const offset = Number(searchParams.get("offset")) || 0;
 
-    const db = createAdminClient();
-    const { data: rows, error } = await db
+    // Use authed DB client for RLS
+    const supabase = await createClient();
+    const { data: rows, error } = await supabase
       .from("generations")
       .select("id, selfie_url, style_slug, status, result_url, error_message, created_at")
-      .eq("user_id", userId ?? "00000000-0000-0000-0000-000000000001")
+      .eq("user_id", userId!)
+      .eq("status", "completed")
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
