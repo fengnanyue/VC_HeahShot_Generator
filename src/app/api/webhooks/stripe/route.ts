@@ -39,6 +39,27 @@ export async function POST(request: Request) {
       }
 
       const admin = createAdminClient();
+      // Idempotency: Stripe may retry webhook delivery. We only credit once per event_id.
+      const { error: eventInsertError } = await admin
+        .from("stripe_webhook_events")
+        .insert({
+          event_id: event.id,
+          event_type: event.type,
+        });
+
+      if (eventInsertError) {
+        // If we've already processed this event, treat as success.
+        // Postgres unique violation is 23505. Supabase surfaces it as `code`.
+        // If we can't confidently detect, fail closed (return 500) so Stripe retries.
+        if ((eventInsertError as any)?.code === "23505") {
+          return NextResponse.json({ received: true, deduped: true });
+        }
+        return NextResponse.json(
+          { error: eventInsertError.message },
+          { status: 500 }
+        );
+      }
+
       const { data: profile } = await admin
         .from("profiles")
         .select("credits_balance")
