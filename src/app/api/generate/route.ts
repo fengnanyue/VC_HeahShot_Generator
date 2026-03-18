@@ -147,7 +147,7 @@ export async function POST(request: Request) {
       .upload(path, imageBuffer, { contentType: "image/jpeg", upsert: true });
 
     if (uploadError) {
-      await db
+      await supabase
         .from("generations")
         .update({
           status: "failed",
@@ -160,7 +160,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { error: updateError } = await db
+    const { error: updateError } = await supabase
       .from("generations")
       .update({
         status: "completed",
