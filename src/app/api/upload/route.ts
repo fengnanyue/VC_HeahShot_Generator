@@ -60,9 +60,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const {
-      data: { signedUrl },
-    } = await admin.storage.from("selfies").createSignedUrl(path, 3600);
+    const selfieSigned = await admin.storage.from("selfies").createSignedUrl(path, 3600);
+    const signedUrl = selfieSigned.data?.signedUrl ?? null;
 
     return NextResponse.json({
       selfie_url: signedUrl ?? path,
