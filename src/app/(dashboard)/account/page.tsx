@@ -1,7 +1,15 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { BuyCreditsButton } from "./BuyCreditsButton";
 
-export default async function AccountPage() {
+type AccountPageProps = {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+};
+
+export default async function AccountPage({ searchParams }: AccountPageProps) {
+  const params = await searchParams;
+  const creditsSuccess = params?.credits === "success";
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -13,7 +21,7 @@ export default async function AccountPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("username, full_name, email, created_at")
+    .select("username, full_name, email, created_at, credits_balance")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -52,6 +60,12 @@ export default async function AccountPage() {
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold text-gray-900">Account</h1>
+
+      {creditsSuccess && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+          Payment successful. Your credits have been added.
+        </div>
+      )}
 
       <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-4">
@@ -128,11 +142,17 @@ export default async function AccountPage() {
       </section>
 
       <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-medium text-gray-900">Billing</h2>
-        <p className="text-sm text-gray-500">
-          Subscription and billing will be available after Stripe integration. For the MVP you have
-          unlimited generations while testing fal.ai.
+        <h2 className="mb-4 text-lg font-medium text-gray-900">Credits & Billing</h2>
+        <div className="mb-4 flex items-baseline gap-2">
+          <span className="text-2xl font-bold text-gray-900">
+            {profile?.credits_balance ?? 0}
+          </span>
+          <span className="text-sm text-gray-500">credits</span>
+        </div>
+        <p className="mb-4 text-sm text-gray-500">
+          1 credit = 1 headshot. $1 = 5 credits.
         </p>
+        <BuyCreditsButton />
       </section>
     </div>
   );

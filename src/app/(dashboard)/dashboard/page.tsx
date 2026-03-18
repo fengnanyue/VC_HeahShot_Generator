@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import { HEADSHOT_STYLES } from "@/lib/constants";
 
 export default function DashboardPage() {
@@ -10,6 +11,7 @@ export default function DashboardPage() {
   const [selectedStyle, setSelectedStyle] = useState<string>(HEADSHOT_STYLES[0].slug);
   const [status, setStatus] = useState<"idle" | "uploading" | "generating" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [outOfCredits, setOutOfCredits] = useState(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
 
   const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,6 +72,7 @@ export default function DashboardPage() {
       return;
     }
     setError(null);
+    setOutOfCredits(false);
     setStatus("generating");
     setResultUrl(null);
     try {
@@ -79,7 +82,10 @@ export default function DashboardPage() {
         body: JSON.stringify({ selfie_url: pathToUse, style_slug: selectedStyle }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Generation failed");
+      if (!res.ok) {
+        if (res.status === 402 || data.code === "INSUFFICIENT_CREDITS") setOutOfCredits(true);
+        throw new Error(data.error ?? "Generation failed");
+      }
       if (data.result_signed_url) setResultUrl(data.result_signed_url);
       setStatus("done");
     } catch (e) {
@@ -161,7 +167,16 @@ export default function DashboardPage() {
       <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-medium text-gray-900">3. Generate</h2>
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+            {error}
+            {outOfCredits && (
+              <span className="ml-1">
+                <Link href="/account" className="font-medium underline hover:no-underline">
+                  Go to Account
+                </Link>
+              </span>
+            )}
+          </div>
         )}
         <button
           type="button"

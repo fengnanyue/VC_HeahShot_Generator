@@ -15,6 +15,7 @@ export interface Profile {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   stripe_subscription_status: string | null;
+  credits_balance: number;
   trial_used_at: string | null;
   created_at: string;
   updated_at: string;

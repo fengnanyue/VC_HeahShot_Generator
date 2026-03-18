@@ -38,6 +38,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid style_slug" }, { status: 400 });
     }
 
+    // Enforce credits when auth is on (1 generation = 1 credit)
+    if (!skipAuth) {
+      const admin = createAdminClient();
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("credits_balance")
+        .eq("id", userId)
+        .single();
+      const credits = profile?.credits_balance ?? 0;
+      if (credits < 1) {
+        return NextResponse.json(
+          { error: "Out of credits. Buy more in Account.", code: "INSUFFICIENT_CREDITS" },
+          { status: 402 }
+        );
+      }
+    }
+
     // Use authed DB client so RLS sees auth.uid()
     const { data: generation, error: insertError } = await supabase
       .from("generations")
@@ -174,6 +191,24 @@ export async function POST(request: Request) {
         { error: updateError.message },
         { status: 500 }
       );
+    }
+
+    // Deduct 1 credit after successful generation (when auth is on)
+    if (!skipAuth) {
+      const adminClient = createAdminClient();
+      const { data: profile } = await adminClient
+        .from("profiles")
+        .select("credits_balance")
+        .eq("id", userId)
+        .single();
+      const current = profile?.credits_balance ?? 0;
+      await adminClient
+        .from("profiles")
+        .update({
+          credits_balance: Math.max(0, current - 1),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", userId);
     }
 
     const { data: signed } = await admin.storage
