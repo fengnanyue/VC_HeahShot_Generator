@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { BuyCreditsButton } from "./BuyCreditsButton";
+import { BuyCreditsButton } from "@/components/BuyCreditsButton";
 
 type AccountPageProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
